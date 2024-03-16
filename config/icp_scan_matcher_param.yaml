@@ -1,0 +1,19 @@
+icp_scan_matcher_node:
+  ros__parameters:
+    icp_scan_matcher:
+      topic_name:
+        cloud: "/camera/depth_registered/points"
+        scan: "/scan"
+        imu_pose: "/wit_ros/imu_pose"
+      tf_frame:
+        map_frame: "map"
+        robot_frame: "base_link"
+      2d: true
+      broadcast_period: 0.001
+      # 点群パラメータ
+      min_point_cloud_size: 100
+      filter:
+        voxelgrid_size: 0.05
+        target_voxelgrid_size: 0.01
+        target_update_min_score: 0.05
+      min_score_limit: 0.05
