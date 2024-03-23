@@ -4,7 +4,7 @@ tf_broadcaster_node:
       topic_name:
         laser_pose: "icp_scan_matcher/laser_pose"
         odom: "/odom"
-        imu: "/wit_ros/imu_pose"
+        imu: "imu_pos" #"/wit_ros/imu_pose"
         estimate_pose: "tf_broadcaster/estimate_pose"
         estimate_twist: "tf_broadcaster/estimate_twist"
       tf_frame:

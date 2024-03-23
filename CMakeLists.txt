@@ -15,7 +15,7 @@ extension_ament_init()
 # ICP Scan Matcher
 extension_ament_create_node(icp_scan_matcher_component
   NODE_NAME "icp_scan_matcher"
-  NODE_PLUGIN "ICPScanMatcher"
+  NODE_PLUGIN "icp_slam::ICPScanMatcher"
 )
 target_link_libraries(icp_scan_matcher_component
   tbb
@@ -23,6 +23,17 @@ target_link_libraries(icp_scan_matcher_component
 target_include_directories(icp_scan_matcher_component PRIVATE ${PCL_INCLUDE_DIRS})
 target_link_libraries(icp_scan_matcher_component ${PCL_LIBRARIES})
 target_compile_definitions(icp_scan_matcher_component PRIVATE ${PCL_DEFINITIONS})
+# Map builder
+extension_ament_create_node(map_builder_component
+  NODE_NAME "map_builder"
+  NODE_PLUGIN "icp_slam::MapBuilder"
+)
+target_link_libraries(map_builder_component
+  tbb
+)
+target_include_directories(map_builder_component PRIVATE ${PCL_INCLUDE_DIRS})
+target_link_libraries(map_builder_component ${PCL_LIBRARIES})
+target_compile_definitions(map_builder_component PRIVATE ${PCL_DEFINITIONS})
 # tf broadcaster
 extension_ament_create_node(tf_broadcaster_component
   NODE_NAME "tf_broadcaster"

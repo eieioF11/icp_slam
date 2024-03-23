@@ -1,0 +1,14 @@
+map_builder_node:
+  ros__parameters:
+    map_builder:
+      topic_name:
+        cloud: "icp_scan_matcher/icp_final_points"
+      tf_frame:
+        map_frame: "map"
+        robot_frame: "base_link"
+      2d: true
+      broadcast_period: 0.001
+      # 点群パラメータ
+      min_point_cloud_size: 50
+      filter:
+        voxelgrid_size: 0.0001

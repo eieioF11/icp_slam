@@ -11,9 +11,10 @@ icp_scan_matcher_node:
       2d: true
       broadcast_period: 0.001
       # 点群パラメータ
-      min_point_cloud_size: 100
-      filter:
-        voxelgrid_size: 0.05
-        target_voxelgrid_size: 0.01
-        target_update_min_score: 0.05
+      min_point_cloud_size: 30
       min_score_limit: 0.05
+      filter:
+        voxelgrid_size: 0.00001
+        target_update_min_score: 0.05
+      normal_estimation:
+        radius_search: 0.5
