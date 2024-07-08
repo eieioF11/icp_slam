@@ -40,10 +40,10 @@ namespace icp_slam {
         : ExtensionNode("icp_scan_matcher_node", name_space, options), broadcaster_(this), tf_buffer_(this->get_clock()), listener_(tf_buffer_) {
       RCLCPP_INFO(this->get_logger(), "start icp_scan_matcher_node");
       // get param
-      std::string CLOUD_TOPIC    = param<std::string>("icp_scan_matcher.topic_name.cloud", "/camera/depth_registered/points");
-      std::string REF_CLOUD_TOPIC    = param<std::string>("icp_scan_matcher.topic_name.ref_cloud", "icp_scan_matcher/icp_final_points");
-      std::string LASER_TOPIC    = param<std::string>("icp_scan_matcher.topic_name.scan", "/scan");
-      std::string IMU_POSE_TOPIC = param<std::string>("icp_scan_matcher.topic_name.imu_pose", "/wit_ros/imu_pose");
+      std::string CLOUD_TOPIC     = param<std::string>("icp_scan_matcher.topic_name.cloud", "/camera/depth_registered/points");
+      std::string REF_CLOUD_TOPIC = param<std::string>("icp_scan_matcher.topic_name.ref_cloud", "icp_scan_matcher/icp_final_points");
+      std::string LASER_TOPIC     = param<std::string>("icp_scan_matcher.topic_name.scan", "/scan");
+      std::string IMU_POSE_TOPIC  = param<std::string>("icp_scan_matcher.topic_name.imu_pose", "/wit_ros/imu_pose");
       // frame
       MAP_FRAME   = param<std::string>("icp_scan_matcher.tf_frame.map_frame", "map");
       ROBOT_FRAME = param<std::string>("icp_scan_matcher.tf_frame.robot_frame", "base_link");
@@ -53,15 +53,15 @@ namespace icp_slam {
       // 点群パラメータ
       MIN_CLOUD_SIZE = param<int>("icp_scan_matcher.min_point_cloud_size", 100);
       VOXELGRID_SIZE = param<double>("icp_scan_matcher.filter.voxelgrid_size", 0.04);
-      RADIUS_SEARCH = param<double>("icp_scan_matcher.normal_estimation.radius_search", 0.5);
+      RADIUS_SEARCH  = param<double>("icp_scan_matcher.normal_estimation.radius_search", 0.5);
       // scan matchingパラメータ
       TARGET_UPDATE_MIN_SCORE = param<double>("icp_scan_matcher.filter.target_update_min_score", 0.0005);
       MIN_SCORE_LIMIT         = param<double>("icp_scan_matcher.min_score_limit", 0.01);
       // init
       // publisher
-      laser_pose_pub_      = this->create_publisher<geometry_msgs::msg::PoseStamped>("icp_scan_matcher/laser_pose", rclcpp::QoS(10).best_effort());
-      debug_cloud_pub_     = this->create_publisher<sensor_msgs::msg::PointCloud2>("icp_scan_matcher/debug_points", rclcpp::QoS(10));
-      now_cloud_pub_       = this->create_publisher<sensor_msgs::msg::PointCloud2>("icp_scan_matcher/now_points", rclcpp::QoS(10));
+      laser_pose_pub_  = this->create_publisher<geometry_msgs::msg::PoseStamped>("icp_scan_matcher/laser_pose", rclcpp::QoS(10).best_effort());
+      debug_cloud_pub_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("icp_scan_matcher/debug_points", rclcpp::QoS(10));
+      now_cloud_pub_   = this->create_publisher<sensor_msgs::msg::PointCloud2>("icp_scan_matcher/now_points", rclcpp::QoS(10));
       // ref_cloud_pub_       = this->create_publisher<sensor_msgs::msg::PointCloud2>("icp_scan_matcher/ref_points", rclcpp::QoS(10));
       icp_final_cloud_pub_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("icp_scan_matcher/icp_final_points", rclcpp::QoS(10));
       // subscriber
@@ -77,25 +77,22 @@ namespace icp_slam {
         cloud_sub_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
             CLOUD_TOPIC, rclcpp::QoS(10).best_effort(), [&](const sensor_msgs::msg::PointCloud2::SharedPtr msg) { icp_scan_matcher(*msg); });
       }
-      ref_cloud_sub_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
-            REF_CLOUD_TOPIC, rclcpp::QoS(10).best_effort(), [&](const sensor_msgs::msg::PointCloud2::SharedPtr msg) {
-              pcl::PointCloud<pcl::PointXYZ> cloud;
-              pcl::fromROSMsg(*msg, cloud);
-              pcl::PointCloud<pcl::PointNormal> n_cloud;
-              pcl::fromROSMsg(*msg, n_cloud);
-              if (cloud.empty()||n_cloud.empty()) {
-                RCLCPP_ERROR(this->get_logger(), "ref_cloud empty");
-                return;
-              }
-              // nan値除去
-              std::vector<int> mapping;
-              pcl::removeNaNFromPointCloud(cloud, cloud, mapping);
-              ref_cloud_ = cloud;
-              ref_n_cloud_ =  n_cloud;
-            });
-      imu_pose_sub_ = this->create_subscription<geometry_msgs::msg::PoseStamped>(
-          IMU_POSE_TOPIC, rclcpp::QoS(10).best_effort(),
-          [&](const geometry_msgs::msg::PoseStamped::SharedPtr msg) { imu_pose_ = make_pose(msg->pose); });
+      ref_cloud_sub_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(REF_CLOUD_TOPIC, rclcpp::QoS(10).best_effort(),
+                                                                                [&](const sensor_msgs::msg::PointCloud2::SharedPtr msg) {
+                                                                                  pcl::PointCloud<pcl::PointXYZ> cloud;
+                                                                                  pcl::fromROSMsg(*msg, cloud);
+                                                                                  pcl::PointCloud<pcl::PointNormal> n_cloud;
+                                                                                  pcl::fromROSMsg(*msg, n_cloud);
+                                                                                  if (cloud.empty() || n_cloud.empty()) {
+                                                                                    RCLCPP_ERROR(this->get_logger(), "ref_cloud empty");
+                                                                                    return;
+                                                                                  }
+                                                                                  // nan値除去
+                                                                                  std::vector<int> mapping;
+                                                                                  pcl::removeNaNFromPointCloud(cloud, cloud, mapping);
+                                                                                  // ref_cloud_ = cloud;
+                                                                                  // ref_n_cloud_ =  n_cloud;
+                                                                                });
     }
 
   private:
@@ -114,7 +111,6 @@ namespace icp_slam {
     tf2_ros::Buffer tf_buffer_;
     tf2_ros::TransformListener listener_;
     // subscriber
-    rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr imu_pose_sub_;
     rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr laser_sub_;
     rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr cloud_sub_;
     rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr ref_cloud_sub_;
@@ -141,6 +137,7 @@ namespace icp_slam {
         RCLCPP_WARN(get_logger(), "%s %s can not Transform", MAP_FRAME.c_str(), ROBOT_FRAME.c_str());
         return;
       }
+      std::cout << (double)this->now().seconds() << std::endl;
       auto map_to_base_link = lookup_transform(tf_buffer_, ROBOT_FRAME, MAP_FRAME);
       if (!map_to_base_link) return;
       Pose3d base_link_pose = make_pose(map_to_base_link.value().transform);
@@ -165,7 +162,6 @@ namespace icp_slam {
       pcl::removeNaNFromPointCloud(now_cloud, now_cloud, mapping);
       //  Down sampling
       now_cloud = voxelgrid_filter(now_cloud, VOXELGRID_SIZE, VOXELGRID_SIZE, VOXELGRID_SIZE);
-      now_cloud_pub_->publish(make_ros_pointcloud2(make_header(MAP_FRAME, get_cloud.header.stamp), now_cloud));
 #if defined(DEBUG_OUTPUT)
       std::cout << "now_cloud size:" << now_cloud.points.size() << "|ref_cloud size:" << ref_cloud_.points.size() << std::endl;
 #endif
@@ -174,10 +170,11 @@ namespace icp_slam {
         return;
       }
       // 法線推定
-      pcl::PointCloud<pcl::PointNormal> now_n_cloud =  normal_estimation(now_cloud,RADIUS_SEARCH);
+      pcl::PointCloud<pcl::PointNormal> now_n_cloud = normal_estimation(now_cloud, RADIUS_SEARCH);
+      now_cloud_pub_->publish(make_ros_pointcloud2<pcl::PointNormal>(make_header(MAP_FRAME, get_cloud.header.stamp), now_n_cloud));
 
       if (ref_cloud_.empty()) {
-        ref_cloud_ = now_cloud;
+        ref_cloud_   = now_cloud;
         ref_n_cloud_ = now_n_cloud;
         icp_final_cloud_pub_->publish(make_ros_pointcloud2<pcl::PointNormal>(make_header(MAP_FRAME, get_cloud.header.stamp), now_n_cloud));
         RCLCPP_WARN(this->get_logger(), "ref_cloud empty");
@@ -207,10 +204,10 @@ namespace icp_slam {
         std::cout << tmat(0, 3) << ", " << tmat(1, 3) << ", " << tmat(2, 3) << std::endl;
 #endif
         // calc laser position
-        laser_pose_       = base_link_pose;
-        Vector3d imu_rpy  = imu_pose_.orientation.get_rpy();
-        Vector3d rpy      = laser_pose_.orientation.get_rpy();
-        Vector3d diff_rpy = {std::atan2(tmat(2, 1), tmat(2, 2)), -std::asin(tmat(2, 0)), std::atan2(tmat(1, 0), tmat(0, 0))};
+        laser_pose_  = base_link_pose;
+        Vector3d rpy = laser_pose_.orientation.get_rpy();
+        // Vector3d diff_rpy = {std::atan2(tmat(2, 1), tmat(2, 2)), -std::asin(tmat(2, 0)), std::atan2(tmat(1, 0), tmat(0, 0))};
+        Vector3d diff_rpy = {std::atan2(tmat(2, 1), tmat(2, 2)), std::asin(tmat(2, 0)), std::atan2(tmat(1, 0), tmat(0, 0))};
         Vector3d diff_pos = {tmat(0, 3), tmat(1, 3), tmat(2, 3)};
         // rpy.x = imu_rpy.x;
         // rpy.y = imu_rpy.y;
@@ -224,11 +221,13 @@ namespace icp_slam {
         std::cout << "norm pos:" << diff_pos.norm() << "|rpy:" << diff_rpy.norm() << std::endl;
 #endif
         if (score < TARGET_UPDATE_MIN_SCORE) {
-          icp_final_cloud_pub_->publish(make_ros_pointcloud2<pcl::PointNormal>(make_header(MAP_FRAME, get_cloud.header.stamp), final_cloud));
+          ref_n_cloud_ += final_cloud;
+          ref_n_cloud_ = voxelgrid_filter(ref_n_cloud_, VOXELGRID_SIZE, VOXELGRID_SIZE, VOXELGRID_SIZE);
         }
-        laser_pose_msg_.header = make_header(MAP_FRAME, rclcpp::Clock().now());
+        laser_pose_msg_.header = make_header(MAP_FRAME, this->now());
         laser_pose_msg_.pose   = make_geometry_pose(laser_pose_);
         laser_pose_pub_->publish(laser_pose_msg_);
+        icp_final_cloud_pub_->publish(make_ros_pointcloud2<pcl::PointNormal>(make_header(MAP_FRAME, get_cloud.header.stamp), ref_n_cloud_));
       }
     }
   };

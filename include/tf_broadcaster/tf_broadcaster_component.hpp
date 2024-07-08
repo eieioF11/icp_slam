@@ -48,6 +48,23 @@ public:
     std::string IMU_TOPIC            = param<std::string>("tf_broadcaster.topic_name.imu", "/wit_ros/imu_pose");
     std::string ESTIMATE_POSE_TOPIC  = param<std::string>("tf_broadcaster.topic_name.estimate_pose", "tf_broadcaster/estimate_pose");
     std::string ESTIMATE_TWIST_TOPIC = param<std::string>("tf_broadcaster.topic_name.estimate_twist", "tf_broadcaster/estimate_twist");
+    // grid_point_observer
+    grid_point_observer_parameter_t gpo_param;
+    gpo_param.grid_width           = param<double>("grid_point_observer.gpo.grid_width", 0.01);
+    gpo_param.min_gain_position    = param<double>("grid_point_observer.gpo.min_gain_position", 0.1);
+    gpo_param.min_gain_orientation = param<double>("grid_point_observer.gpo.min_gain_orientation", 0.03);
+    gpo_param.max_gain_position    = param<double>("grid_point_observer.gpo.max_gain_position", 0.4);
+    gpo_param.max_gain_orientation = param<double>("grid_point_observer.gpo.max_gain_orientation", 0.1);
+    // robotパラメータ
+    MIN_VEL                = param<double>("grid_point_observer.robot.min_velocity", 0.01);
+    MIN_ANGULAR            = param<double>("grid_point_observer.robot.min_angular", 0.01);
+    gpo_param.max_velocity = param<double>("grid_point_observer.robot.max_velocity", 5.0);
+    gpo_param.max_angular  = param<double>("grid_point_observer.robot.max_angular", 5.0);
+    // init
+    gpo_.set_params(gpo_param);
+    odom_pose_.position = estimate_pose_.position = {0.0, 0.0, 0.0};
+    odom_pose_.orientation = estimate_pose_.orientation = {0.0, 0.0, 0.0, 1.0};
+    initialization_                                     = true;
     // frame
     MAP_FRAME   = param<std::string>("tf_broadcaster.tf_frame.map_frame", "map");
     ODOM_FRAME  = param<std::string>("tf_broadcaster.tf_frame.odom_frame", "odom");
@@ -66,17 +83,18 @@ public:
                                                                    std::bind(&TFBroadcaster::odometry_callback, this, std::placeholders::_1));
     laser_pose_sub_ = this->create_subscription<geometry_msgs::msg::PoseStamped>(
         LASER_POSE_TOPIC, rclcpp::QoS(10).best_effort(), std::bind(&TFBroadcaster::laser_pose_callback, this, std::placeholders::_1));
-    imu_sub_ = this->create_subscription<geometry_msgs::msg::PoseStamped>(IMU_TOPIC, rclcpp::QoS(10).best_effort(),
-                                                                          std::bind(&TFBroadcaster::imu_callback, this, std::placeholders::_1));
     // timer
     main_timer_ = this->create_wall_timer(1s * BROADCAST_PERIOD, [&]() {
-      estimate_pose_          = laser_pose_;
+      // estimate_pose_          = laser_pose_;
+      const auto& [estimate_position, estimate_orientation] = gpo_.update_estimate_pose();
+      estimate_pose_.position                               = estimate_position;
+      estimate_pose_.orientation.set_rpy(estimate_orientation.x, estimate_orientation.y, estimate_orientation.z);
       estimate_twist_.linear  = odom_twist_.linear.get_rotated(estimate_pose_.orientation.get_rpy());
       estimate_twist_.angular = odom_twist_.angular;
       // map -> odom tf
       if (ODOM_TF) {
         geometry_msgs::msg::TransformStamped transform_stamped;
-        transform_stamped.header         = make_header(MAP_FRAME, rclcpp::Clock().now());
+        transform_stamped.header         = make_header(MAP_FRAME, this->now());
         transform_stamped.child_frame_id = ODOM_FRAME;
         transform_stamped.transform      = make_geometry_transform(odom_pose_);
         broadcaster_.sendTransform(transform_stamped);
@@ -88,16 +106,16 @@ public:
       }
 
       geometry_msgs::msg::PoseStamped estimate_pose_msg;
-      estimate_pose_msg.header = make_header(MAP_FRAME, rclcpp::Clock().now());
+      estimate_pose_msg.header = make_header(MAP_FRAME, this->now());
       estimate_pose_msg.pose   = make_geometry_pose(estimate_pose_);
       geometry_msgs::msg::TwistStamped estimate_twist_msg;
-      estimate_twist_msg.header = make_header(ROBOT_FRAME, rclcpp::Clock().now());
+      estimate_twist_msg.header = make_header(ROBOT_FRAME, this->now());
       estimate_twist_msg.twist  = make_geometry_twist(estimate_twist_);
 
       estimate_pose_pub_->publish(estimate_pose_msg);
       estimate_twist_pub_->publish(estimate_twist_msg);
       geometry_msgs::msg::TransformStamped transform_stamped;
-      transform_stamped.header         = make_header(MAP_FRAME, rclcpp::Clock().now());
+      transform_stamped.header         = make_header(MAP_FRAME, this->now());
       transform_stamped.child_frame_id = ROBOT_FRAME;
       transform_stamped.transform      = make_geometry_transform(estimate_pose_);
       broadcaster_.sendTransform(transform_stamped);
@@ -108,14 +126,15 @@ public:
   void odometry_callback(const nav_msgs::msg::Odometry::ConstPtr msg) {
     odom_twist_ = make_twist(*msg);
     odom_pose_  = make_pose(*msg);
+    gpo_.set_deadreckoning(odom_pose_.position, odom_pose_.orientation.get_rpy(), odom_twist_);
   }
 
-  void imu_callback(const geometry_msgs::msg::PoseStamped::ConstPtr msg) { imu_pose_ = make_pose(msg->pose); }
 
   void laser_pose_callback(const geometry_msgs::msg::PoseStamped::ConstPtr msg) {
     RCLCPP_INFO(this->get_logger(), "get laser pose");
     laser_pose_ = make_pose(msg->pose);
     laser_pose_.position += estimate_twist_.linear * (double)(this->get_clock()->now().seconds() - rclcpp::Time(msg->header.stamp).seconds());
+    gpo_.set_starreckoning(laser_pose_.position, laser_pose_.orientation.get_rpy());
   }
 
 private:
@@ -126,6 +145,8 @@ private:
   std::string ODOM_FRAME;
   double BROADCAST_PERIOD;
   bool ODOM_TF;
+  double MIN_VEL;
+  double MIN_ANGULAR;
   // マルチスレッド関連
   inline static std::mutex mtx;
   // tf
@@ -138,16 +159,18 @@ private:
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr laser_pose_sub_;
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr estimate_pose_sub_;
-  rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr imu_sub_;
   // publisher
   rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr estimate_pose_pub_;
   rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr estimate_twist_pub_;
   // pose
   Pose3d odom_pose_;
+  Pose3d init_odom_pose_;
   Pose3d imu_pose_;
   Pose3d laser_pose_;
   Pose3d estimate_pose_;
   // vel
   Twistd odom_twist_;
   Twistd estimate_twist_;
+  // filter
+  GridPointObserver gpo_;
 };

@@ -13,9 +13,9 @@ icp_scan_matcher_node:
       broadcast_period: 0.001
       # 点群パラメータ
       min_point_cloud_size: 30
-      min_score_limit: 0.05
+      min_score_limit: 0.1
       filter:
-        voxelgrid_size: 0.00001
-        target_update_min_score: 0.05
+        voxelgrid_size: 0.2
+        target_update_min_score: 0.001
       normal_estimation:
-        radius_search: 0.5
+        radius_search: 0.7
